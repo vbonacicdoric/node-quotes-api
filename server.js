@@ -4,20 +4,23 @@ const app = express();
 app.use(express.json())
 const fs = require("fs");
 const { request } = require("http");
-
+const jwtSecret = "migracodeocc1"
+const jwt = require("jsonwebtoken");
 // AUX FUNCTIONS
-function getQuotesFromDatabase() {
-  const text = fs.readFileSync("quotes.json");
-  return JSON.parse(text);
-}
 
 function saveQuotesToDataBase(arr){
   fs.writeFileSync("quotes.json",JSON.Stringlify(arr, null, 2));
   fs.writeFileSync(databaseFile, text);
 }
 
+const usersFile = "users.json"
 
 // FUNCTIONS
+
+function getQuotesFromDatabase() {
+  const text = fs.readFileSync("quotes.json");
+  return JSON.parse(text);
+}
 
 const getQuotes = function (request, response) {
   const quotes = getQuotesFromDatabase();
@@ -70,6 +73,60 @@ function deleteQuote(request, response) {
   response.send();
 }
 
+async function signUp(req, res) {
+  const users = getUsersFromDataBase()
+  const newUser = req.body
+  const id = Number(req.params.id)
+  newUser.id = users.length
+  const sameUser = users.find((u) => u.userName === newUser.userName);
+  if (sameUser) {
+    res
+      .status(400)
+      .json({ message: "user with same userName already exists." });
+  } else {
+    const ids = users.map((u) => u.id);
+    newUser.id = users.length;
+    const salt = await bcrypt.genSalt(constantNumber);
+    newUser.password = await bcrypt.hash(newUser.password, salt);
+    users.push(newUser);
+
+    saveUsersToDatabase(users);
+    const jwtToken = generateJWT(newUser.id)
+    res.status(201).json({ jwtToken: jwtToken, isAuthenticated: true, id: newUser.id, userName: newUser.userName });
+  }
+}
+ 
+
+function generateJWT(userId) {
+  // payload is just an object which usually contains some information about user but not confidential information such as password.
+  const payload = {
+    user: {
+      id: userId
+    }
+  };
+
+  return jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+}
+
+function authenticate(req, res, next) {
+  let token = req.header("authorization");
+
+
+  if (!token) {
+    return res.status(403).send({ message: "authorization denied", isAuthenticated: false });
+  }
+
+  token = token.split(" ")[1];
+
+  try {
+    jwt.verify(token, jwtSecret);
+
+    next();
+
+  } catch (err) {
+    res.status(401).send({ message: "Token is not valid", isAuthenticated: false });
+  }
+};
 
 
 // MIDDLEWARES
@@ -77,9 +134,10 @@ app.get("/quotes", getQuotes);
 app.get("/quotes/:id", getQuoteById)
 app.post("/quotes", postQuote)
 
-
+app.post("/signUp", signUp)
 
 const express = require("express");
+const { sign } = require("crypto");
 const app = express();
 app.use(express.json());
 app.get("/quotes", getQuotes);
